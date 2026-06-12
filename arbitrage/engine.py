@@ -95,16 +95,27 @@ class ArbitrageEngine:
         return report
 
     async def run(self, stop_event: Optional[asyncio.Event] = None) -> None:
-        """Run the polling loop until ``stop_event`` is set (or forever).
+        """Run the polling loop forever, until ``stop_event`` is set.
 
-        The loop targets a steady cadence: the sleep is adjusted by how long
-        the fetch took, so a slow cycle does not drift the schedule.
+        This loop is designed to NEVER exit on its own. Every failure mode is
+        contained:
+          * startup (loading exchange markets) is retried instead of crashing,
+          * each polling cycle is wrapped so a bad tick is logged and skipped.
+
+        The only way out is ``stop_event`` being set (e.g. by SIGINT/SIGTERM),
+        which is the deliberate "interrupted" path. The loop targets a steady
+        cadence: the sleep is adjusted by how long the fetch took, so a slow
+        cycle does not drift the schedule.
         """
 
-        await self.start()
         stop_event = stop_event or asyncio.Event()
         interval = self.settings.poll_interval
         try:
+            # Resilient startup: a network hiccup while loading markets must
+            # not terminate the service. Keep retrying until it succeeds or we
+            # are asked to stop.
+            await self._start_with_retry(stop_event, interval)
+
             while not stop_event.is_set():
                 loop = asyncio.get_running_loop()
                 started = loop.time()
@@ -116,12 +127,35 @@ class ArbitrageEngine:
 
                 elapsed = loop.time() - started
                 delay = max(0.0, interval - elapsed)
-                try:
-                    await asyncio.wait_for(stop_event.wait(), timeout=delay)
-                except asyncio.TimeoutError:
-                    pass  # normal: interval elapsed, loop again
+                await self._sleep_or_stop(stop_event, delay)
         finally:
             await self.close()
+
+    async def _start_with_retry(
+        self, stop_event: asyncio.Event, interval: float
+    ) -> None:
+        """Load connectors, retrying on failure until ready or stopped.
+
+        Without this guard a failed ``load_markets()`` would propagate out of
+        ``run()`` and silently kill the process right after startup.
+        """
+        while not stop_event.is_set():
+            try:
+                await self.start()
+                return
+            except Exception:  # noqa: BLE001 - never crash on startup
+                log.exception(
+                    "Engine startup failed; retrying in %.0fs", interval
+                )
+                await self._sleep_or_stop(stop_event, interval)
+
+    @staticmethod
+    async def _sleep_or_stop(stop_event: asyncio.Event, delay: float) -> None:
+        """Sleep up to ``delay`` seconds, waking early if ``stop_event`` fires."""
+        try:
+            await asyncio.wait_for(stop_event.wait(), timeout=delay)
+        except asyncio.TimeoutError:
+            pass  # normal: interval elapsed, carry on
 
     async def _emit(self, report: SpreadReport) -> None:
         result = self._sink(report)
