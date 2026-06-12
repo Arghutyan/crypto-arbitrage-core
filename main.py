@@ -13,8 +13,11 @@ import asyncio
 import logging
 import signal
 
-from arbitrage.config import load_settings
+from arbitrage.config import load_db_settings, load_settings
+from arbitrage.database import Database
 from arbitrage.engine import ArbitrageEngine
+from arbitrage.models import SpreadReport
+from arbitrage.reporter import ConsoleSink
 
 
 def _setup_logging() -> None:
@@ -40,11 +43,24 @@ async def main() -> None:
     _setup_logging()
     settings = load_settings()
 
+    db = Database(load_db_settings())
+    await db.connect()
+    await db.init_schema()
+
+    console = ConsoleSink()
+
+    async def _sink(report: SpreadReport) -> None:
+        console(report)
+        await db.insert_spread(report)
+
     stop = asyncio.Event()
     _install_signal_handlers(asyncio.get_running_loop(), stop)
 
-    engine = ArbitrageEngine.from_settings(settings)
-    await engine.run(stop_event=stop)
+    engine = ArbitrageEngine.from_settings(settings, sink=_sink)
+    try:
+        await engine.run(stop_event=stop)
+    finally:
+        await db.close()
 
 
 if __name__ == "__main__":

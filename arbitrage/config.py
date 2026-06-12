@@ -57,6 +57,28 @@ class Settings:
     )
 
 
+@dataclass(frozen=True)
+class DbSettings:
+    """Connection parameters for the PostgreSQL persistence layer."""
+
+    host: str = "postgres-service"
+    port: int = 5432
+    user: str = "db_user"
+    password: str = "changeme"
+    name: str = "crypto_analytics"
+
+
+def load_db_settings() -> DbSettings:
+    """Build :class:`DbSettings` from environment variables."""
+    return DbSettings(
+        host=os.getenv("DB_HOST", "postgres-service"),
+        port=int(os.getenv("DB_PORT", "5432")),
+        user=os.getenv("DB_USER", "db_user"),
+        password=os.getenv("DB_PASSWORD", "changeme"),
+        name=os.getenv("DB_NAME", "crypto_analytics"),
+    )
+
+
 def load_settings() -> Settings:
     """Build :class:`Settings`, applying environment-variable overrides."""
 

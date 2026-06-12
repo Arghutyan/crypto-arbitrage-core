@@ -38,6 +38,25 @@ def header(report: SpreadReport) -> str:
     )
 
 
+class ConsoleSink:
+    """Stateful callable that prints reports to stdout with a one-time header.
+
+    Separating the header-printed state into this class lets ``main`` compose
+    it with other sinks (e.g. the DB sink) without touching the engine.
+    """
+
+    def __init__(self) -> None:
+        self._header_printed = False
+
+    def __call__(self, report: SpreadReport) -> None:
+        if not self._header_printed:
+            hdr = header(report)
+            print(hdr)
+            print("-" * len(hdr))
+            self._header_printed = True
+        print(format_line(report))
+
+
 def format_line(report: SpreadReport) -> str:
     """Render a single report as an aligned, human-readable log line."""
 

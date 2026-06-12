@@ -1,0 +1,32 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: crypto-arb-engine
+  labels:
+    app: crypto-arb-engine
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: crypto-arb-engine
+  template:
+    metadata:
+      labels:
+        app: crypto-arb-engine
+    spec:
+      imagePullSecrets:
+        - name: ghcr-secret
+      containers:
+        - name: crypto-arb-engine
+          image: ghcr.io/arghutyan/crypto-arbitrage-core:latest
+          imagePullPolicy: Always
+          resources:
+            requests:
+              memory: "128Mi"
+              cpu: "100m"
+            limits:
+              memory: "256Mi"
+              cpu: "200m"
+          securityContext:
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
