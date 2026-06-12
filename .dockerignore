@@ -1,0 +1,28 @@
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Python caches / build artifacts
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Version control & project meta
+.git/
+.gitignore
+.dockerignore
+Dockerfile
+
+# Docs & local files
+README.md
+*.log
+.env
+.DS_Store
+
+# Editor/IDE
+.vscode/
+.idea/
