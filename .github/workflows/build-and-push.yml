@@ -149,3 +149,4 @@ jobs:
             set -e
             kubectl rollout restart deployment/crypto-arb-engine
             kubectl rollout restart deployment/crypto-api
+            export KUBECONFIG=~/.kube/config
