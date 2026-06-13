@@ -147,6 +147,6 @@ jobs:
           command_timeout: 10m
           script: |
             set -e
+            export KUBECONFIG=~/.kube/config
             kubectl rollout restart deployment/crypto-arb-engine
             kubectl rollout restart deployment/crypto-api
-            export KUBECONFIG=~/.kube/config
