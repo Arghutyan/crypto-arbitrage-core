@@ -30,21 +30,24 @@ spec:
           # Same core image as the engine/api; the command selects the bot role.
           command: ["python", "-m", "bot"]
           env:
-            # Single connection-string standard, matching docker-compose.
-            # TODO: migrate credentials into the app-secrets Secret.
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: spread-app-secrets
+                  key: POSTGRES_PASSWORD
             - name: DATABASE_URL
-              value: "postgresql+asyncpg://db_user:changeme@postgres-service:5432/crypto_analytics"
+              value: "postgresql+asyncpg://db_user:$(POSTGRES_PASSWORD)@postgres-service:5432/crypto_analytics"
             # The bot is useless without a token, so this ref is required
             # (no optional: true) — the pod will fail fast if it is missing.
             - name: TELEGRAM_BOT_TOKEN
               valueFrom:
                 secretKeyRef:
-                  name: app-secrets
+                  name: spread-app-secrets
                   key: TELEGRAM_BOT_TOKEN
             - name: TELEGRAM_ADMIN_IDS
               valueFrom:
                 secretKeyRef:
-                  name: app-secrets
+                  name: spread-app-secrets
                   key: TELEGRAM_ADMIN_IDS
                   optional: true
           resources:

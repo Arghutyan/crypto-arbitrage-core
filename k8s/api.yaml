@@ -30,10 +30,16 @@ spec:
               containerPort: 8000
               protocol: TCP
           env:
-            # Single connection-string standard, matching docker-compose.
-            # TODO: migrate credentials into the app-secrets Secret.
+            # Pull the password from the CI-managed Secret, then reference it
+            # via Kubernetes $(VAR_NAME) interpolation in DATABASE_URL so the
+            # password is never hardcoded in any manifest.
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: spread-app-secrets
+                  key: POSTGRES_PASSWORD
             - name: DATABASE_URL
-              value: "postgresql+asyncpg://db_user:changeme@postgres-service:5432/crypto_analytics"
+              value: "postgresql+asyncpg://db_user:$(POSTGRES_PASSWORD)@postgres-service:5432/crypto_analytics"
           resources:
             requests:
               cpu: "100m"

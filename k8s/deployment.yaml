@@ -26,10 +26,13 @@ spec:
           # Default image command (python main.py) runs the scan+alert engine.
           command: ["python", "main.py"]
           env:
-            # Single connection-string standard, matching docker-compose.
-            # TODO: migrate credentials into the app-secrets Secret.
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: spread-app-secrets
+                  key: POSTGRES_PASSWORD
             - name: DATABASE_URL
-              value: "postgresql+asyncpg://db_user:changeme@postgres-service:5432/crypto_analytics"
+              value: "postgresql+asyncpg://db_user:$(POSTGRES_PASSWORD)@postgres-service:5432/crypto_analytics"
             - name: ARB_POLL_INTERVAL
               value: "30"
             - name: ARB_MIN_RAW_SPREAD
@@ -37,13 +40,13 @@ spec:
             - name: TELEGRAM_BOT_TOKEN
               valueFrom:
                 secretKeyRef:
-                  name: app-secrets
+                  name: spread-app-secrets
                   key: TELEGRAM_BOT_TOKEN
                   optional: true
             - name: TELEGRAM_ADMIN_IDS
               valueFrom:
                 secretKeyRef:
-                  name: app-secrets
+                  name: spread-app-secrets
                   key: TELEGRAM_ADMIN_IDS
                   optional: true
           resources:
