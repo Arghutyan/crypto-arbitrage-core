@@ -8,6 +8,7 @@ docker-compose and Kubernetes.
 from __future__ import annotations
 
 import os
+import re
 from dataclasses import dataclass, field
 
 
@@ -74,22 +75,45 @@ class Settings:
     exchanges: tuple[ExchangeSpec, ...] = EXCHANGE_SPECS
 
 
+def _normalize_asyncpg_dsn(url: str) -> str:
+    """Make a connection string consumable by ``asyncpg``.
+
+    ``asyncpg`` wants a bare ``postgresql://`` scheme and rejects the
+    SQLAlchemy-style driver suffix (``postgresql+asyncpg://``). Strip any
+    ``+driver`` component so a single ``DATABASE_URL`` can be shared with
+    tooling that expects the SQLAlchemy form.
+    """
+    return re.sub(r"^postgres(?:ql)?\+\w+://", "postgresql://", url, count=1)
+
+
 @dataclass(frozen=True)
 class DbSettings:
-    """PostgreSQL connection parameters."""
+    """PostgreSQL connection parameters.
 
-    host: str = "postgres-service"
+    A full ``DATABASE_URL`` takes precedence when provided; otherwise the DSN
+    is assembled from the official ``POSTGRES_*`` parts plus the host/port.
+    """
+
+    host: str = "crypto-db"
     port: int = 5432
     user: str = "db_user"
     password: str = "changeme"
     name: str = "crypto_analytics"
+    url: str = ""
 
     @property
     def dsn(self) -> str:
+        if self.url:
+            return _normalize_asyncpg_dsn(self.url)
         return (
             f"postgresql://{self.user}:{self.password}"
             f"@{self.host}:{self.port}/{self.name}"
         )
+
+    @property
+    def safe_dsn(self) -> str:
+        """DSN with the password redacted, safe for logs."""
+        return re.sub(r"(://[^:/@]+:)[^@]*@", r"\1***@", self.dsn)
 
 
 @dataclass(frozen=True)
@@ -135,13 +159,18 @@ def load_settings() -> Settings:
 
 
 def load_db_settings() -> DbSettings:
-    """Build :class:`DbSettings` from environment variables."""
+    """Build :class:`DbSettings` from environment variables.
+
+    ``DATABASE_URL`` is the single source of truth and is supplied identically
+    by Docker Compose and Kubernetes. When it is absent (e.g. running the
+    backend directly on a host) the DSN is assembled from the official
+    ``POSTGRES_*`` parts instead.
+    """
     return DbSettings(
-        host=os.getenv("DB_HOST", "postgres-service"),
-        port=int(os.getenv("DB_PORT", "5432")),
-        user=os.getenv("DB_USER", "db_user"),
-        password=os.getenv("DB_PASSWORD", "changeme"),
-        name=os.getenv("DB_NAME", "crypto_analytics"),
+        user=os.getenv("POSTGRES_USER", "db_user"),
+        password=os.getenv("POSTGRES_PASSWORD", "changeme"),
+        name=os.getenv("POSTGRES_DB", "crypto_analytics"),
+        url=os.getenv("DATABASE_URL", ""),
     )
 
 

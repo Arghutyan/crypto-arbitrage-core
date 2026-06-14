@@ -30,16 +30,10 @@ spec:
               containerPort: 8000
               protocol: TCP
           env:
-            - name: DB_HOST
-              value: "postgres-service"
-            - name: DB_PORT
-              value: "5432"
-            - name: DB_USER
-              value: "db_user"
-            - name: DB_PASSWORD
-              value: "changeme"          # TODO: migrate to a K8s Secret
-            - name: DB_NAME
-              value: "crypto_analytics"
+            # Single connection-string standard, matching docker-compose.
+            # TODO: migrate credentials into the app-secrets Secret.
+            - name: DATABASE_URL
+              value: "postgresql+asyncpg://db_user:changeme@postgres-service:5432/crypto_analytics"
           resources:
             requests:
               cpu: "100m"

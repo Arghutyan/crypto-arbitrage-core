@@ -77,9 +77,8 @@ docker compose up --build
 python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 
-# point at a local/remote postgres
-export DB_HOST=127.0.0.1 DB_PORT=5432 DB_USER=db_user \
-       DB_PASSWORD=changeme DB_NAME=crypto_analytics
+# point at a local/remote postgres (use localhost when running outside compose)
+export DATABASE_URL=postgresql+asyncpg://db_user:changeme@localhost:5432/crypto_analytics
 
 python main.py                                   # engine
 uvicorn api.main:app --host 0.0.0.0 --port 8000  # api
@@ -95,11 +94,10 @@ Compose and Kubernetes.
 
 | Variable              | Default            | Used by         | Meaning                                   |
 | --------------------- | ------------------ | --------------- | ----------------------------------------- |
-| `DB_HOST`             | `postgres-service` | engine/api/bot  | PostgreSQL host                           |
-| `DB_PORT`             | `5432`             | engine/api/bot  | PostgreSQL port                           |
-| `DB_USER`             | `db_user`          | engine/api/bot  | PostgreSQL user                           |
-| `DB_PASSWORD`         | `changeme`         | engine/api/bot  | PostgreSQL password                       |
-| `DB_NAME`             | `crypto_analytics` | engine/api/bot  | PostgreSQL database                       |
+| `DATABASE_URL`        | _(constructed)_    | engine/api/bot  | Full DSN; the connection standard (`+asyncpg` suffix is normalised) |
+| `POSTGRES_USER`       | `db_user`          | db, engine/api/bot | PostgreSQL user (official image var); builds the DSN when `DATABASE_URL` is unset |
+| `POSTGRES_PASSWORD`   | `changeme`         | db, engine/api/bot | PostgreSQL password (official image var) |
+| `POSTGRES_DB`         | `crypto_analytics` | db, engine/api/bot | PostgreSQL database (official image var) |
 | `TELEGRAM_BOT_TOKEN`  | _(empty)_          | engine, bot     | Telegram token; alerts are off if unset   |
 | `ALERT_COOLDOWN_SECONDS` | `900`           | engine          | Per-user/opportunity alert cooldown       |
 | `ARB_POLL_INTERVAL`   | `30`               | engine          | Seconds between scan cycles               |

@@ -98,7 +98,7 @@ class Database:
             max_size=10,
             command_timeout=15,
         )
-        log.info("DB pool connected → %s", self._settings.host)
+        log.info("DB pool connected → %s", self._settings.safe_dsn)
 
     async def init_schema(self) -> None:
         async with self.pool.acquire() as conn:

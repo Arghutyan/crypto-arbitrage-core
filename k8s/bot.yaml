@@ -30,16 +30,10 @@ spec:
           # Same core image as the engine/api; the command selects the bot role.
           command: ["python", "-m", "bot"]
           env:
-            - name: DB_HOST
-              value: "postgres-service"
-            - name: DB_PORT
-              value: "5432"
-            - name: DB_USER
-              value: "db_user"
-            - name: DB_PASSWORD
-              value: "changeme"          # TODO: migrate to a K8s Secret
-            - name: DB_NAME
-              value: "crypto_analytics"
+            # Single connection-string standard, matching docker-compose.
+            # TODO: migrate credentials into the app-secrets Secret.
+            - name: DATABASE_URL
+              value: "postgresql+asyncpg://db_user:changeme@postgres-service:5432/crypto_analytics"
             # The bot is useless without a token, so this ref is required
             # (no optional: true) — the pod will fail fast if it is missing.
             - name: TELEGRAM_BOT_TOKEN
