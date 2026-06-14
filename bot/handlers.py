@@ -41,10 +41,64 @@ def _parse_pct(text: str) -> float | None:
 async def cmd_start(message: Message, db: Database, state: FSMContext) -> None:
     await state.clear()
     user_in = message.from_user
-    user = await db.upsert_user(user_in.id, user_in.username)
+    await db.upsert_user(user_in.id, user_in.username)
+    # Establish the persistent bottom navigation bar (reply keyboard).
     await message.answer(
         formatting.WELCOME,
-        reply_markup=keyboards.main_menu(user.get("alerts_enabled", True)),
+        reply_markup=keyboards.main_reply_menu(),
+    )
+
+
+# --------------------------------------------------------------------------- #
+# Persistent reply-keyboard navigation
+#
+# These plain-text handlers back the bottom menu buttons. They are registered
+# before the filter FSM handlers and carry no state filter, so tapping a menu
+# button always works — even mid-dialog — letting the user escape cleanly.
+# --------------------------------------------------------------------------- #
+@router.message(F.text == keyboards.BTN_LIVE_TOP)
+async def msg_live_top(message: Message, db: Database, state: FSMContext) -> None:
+    await state.clear()
+    rows = await db.get_live_spreads(limit=10)
+    await message.answer(formatting.format_top(rows))
+
+
+@router.message(F.text == keyboards.BTN_MY_FILTERS)
+async def msg_my_filters(
+    message: Message, db: Database, state: FSMContext
+) -> None:
+    await state.clear()
+    user = await db.get_user(message.from_user.id) or {}
+    await message.answer(
+        formatting.format_filters(user),
+        reply_markup=keyboards.excluded_exchanges_keyboard(
+            user.get("excluded_exchanges", [])
+        ),
+    )
+
+
+@router.message(F.text == keyboards.BTN_TOGGLE_ALERTS)
+async def msg_toggle_alerts(
+    message: Message, db: Database, state: FSMContext
+) -> None:
+    await state.clear()
+    user = await db.get_user(message.from_user.id) or {}
+    new_state = not user.get("alerts_enabled", True)
+    await db.update_filters(message.from_user.id, alerts_enabled=new_state)
+    await message.answer(
+        "🔔 <b>Alerts enabled.</b> I'll ping you on matching spreads."
+        if new_state
+        else "🔕 <b>Alerts paused.</b> Tap 🔔 Alerts again to resume."
+    )
+
+
+@router.message(F.text == keyboards.BTN_SET_FILTERS)
+async def msg_set_filters(message: Message, state: FSMContext) -> None:
+    await state.set_state(FilterSetup.min_spread)
+    await message.answer(
+        "⚙️ <b>Step 1/2 — Minimum Real Spread</b>\n\n"
+        "Send the minimum spread % to alert on (e.g. <code>0.8</code>).",
+        reply_markup=keyboards.cancel_keyboard(),
     )
 
 

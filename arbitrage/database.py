@@ -38,6 +38,8 @@ CREATE TABLE IF NOT EXISTS live_spreads (
     real_spread_pct     DOUBLE PRECISION,
     long_funding        DOUBLE PRECISION,
     short_funding       DOUBLE PRECISION,
+    long_funding_interval_h  DOUBLE PRECISION,
+    short_funding_interval_h DOUBLE PRECISION,
     net_funding_24h_pct DOUBLE PRECISION,
     farm_24h_pct        DOUBLE PRECISION,
     farm_72h_pct        DOUBLE PRECISION,
@@ -66,14 +68,23 @@ CREATE TABLE IF NOT EXISTS symbol_blacklist (
 );
 """
 
+# Idempotent migrations for upgrading an existing live_spreads table whose
+# CREATE was run before these columns existed.
+_MIGRATIONS = """
+ALTER TABLE live_spreads
+    ADD COLUMN IF NOT EXISTS long_funding_interval_h  DOUBLE PRECISION,
+    ADD COLUMN IF NOT EXISTS short_funding_interval_h DOUBLE PRECISION;
+"""
+
 _INSERT_SPREAD = """
 INSERT INTO live_spreads (
     asset, long_exchange, short_exchange, long_symbol, short_symbol,
     long_price, short_price, raw_spread_pct, real_spread_pct,
-    long_funding, short_funding, net_funding_24h_pct,
-    farm_24h_pct, farm_72h_pct, next_funding_ms, updated_at
+    long_funding, short_funding,
+    long_funding_interval_h, short_funding_interval_h,
+    net_funding_24h_pct, farm_24h_pct, farm_72h_pct, next_funding_ms, updated_at
 ) VALUES (
-    $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16
+    $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18
 )
 """
 
@@ -103,6 +114,7 @@ class Database:
     async def init_schema(self) -> None:
         async with self.pool.acquire() as conn:
             await conn.execute(_SCHEMA)
+            await conn.execute(_MIGRATIONS)
         log.info(
             "DB schema ready (live_spreads, telegram_users, symbol_blacklist)"
         )
@@ -132,6 +144,8 @@ class Database:
                 o.real_spread_pct,
                 o.long_funding,
                 o.short_funding,
+                o.long_funding_interval_h,
+                o.short_funding_interval_h,
                 o.net_funding_24h_pct,
                 o.farm_24h_pct,
                 o.farm_72h_pct,

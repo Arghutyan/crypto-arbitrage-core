@@ -71,6 +71,10 @@ class Opportunity:
 
     long_funding: Optional[float] = None
     short_funding: Optional[float] = None
+    # Funding charge interval per leg, in hours (e.g. 8.0 or 4.0). Derived from
+    # the exchange payload, never assumed.
+    long_funding_interval_h: Optional[float] = None
+    short_funding_interval_h: Optional[float] = None
     # Net funding you keep per 24h (short income minus long cost), as percent.
     net_funding_24h_pct: Optional[float] = None
     farm_24h_pct: Optional[float] = None
@@ -97,6 +101,8 @@ class Opportunity:
             "real_spread_pct": self.real_spread_pct,
             "long_funding": self.long_funding,
             "short_funding": self.short_funding,
+            "long_funding_interval_h": self.long_funding_interval_h,
+            "short_funding_interval_h": self.short_funding_interval_h,
             "net_funding_24h_pct": self.net_funding_24h_pct,
             "farm_24h_pct": self.farm_24h_pct,
             "farm_72h_pct": self.farm_72h_pct,

@@ -23,28 +23,30 @@ def _countdown(next_ms: Optional[int]) -> str:
         return "now"
     h = int(remaining // 3600)
     m = int((remaining % 3600) // 60)
-    return f"{h}h {m}m"
+    return f"{h}h {m}m" if h > 0 else f"{m}m"
 
 
 def format_top(rows: list[dict], limit: int = 10) -> str:
     if not rows:
         return (
-            "😴 <b>No live opportunities right now.</b>\n"
-            "The scanner hasn't found spreads above threshold yet — "
-            "try again in a moment."
+            "😴 <b>No live spreads right now</b>\n\n"
+            "The scanner hasn't found anything above threshold yet. "
+            "Sit tight — the next cycle runs in a few seconds. ⏳"
         )
-    lines = ["🔥 <b>Live Top Spreads</b>\n"]
+    lines = ["🔥 <b>Live Top Spreads</b>", "<i>Buy long-leg · short rich-leg</i>"]
     for i, r in enumerate(rows[:limit], start=1):
         spread = r.get("real_spread_pct")
         if spread is None:
             spread = r.get("raw_spread_pct")
         farm = r.get("farm_24h_pct")
         lines.append(
-            f"{i}. <b>{r['asset']}</b>  ·  <b>{_fmt_pct(spread)}</b>\n"
-            f"    {r['long_exchange']} → {r['short_exchange']}  ·  "
-            f"🌾 {_fmt_pct(farm, 3)}  ·  ⏳ {_countdown(r.get('next_funding_ms'))}"
+            "\n"
+            f"<b>{i}.</b> 🚨 <b>{r['asset']}</b> | Spread: "
+            f'<span class="tg-spoiler"><b>{_fmt_pct(spread)}</b></span>\n'
+            f"🏦 {r['long_exchange']} ➡️ {r['short_exchange']}\n"
+            f"🌾 Farm 24h: <b>{_fmt_pct(farm, 3)}</b>  ·  "
+            f"⏱ Next Funding in: <b>{_countdown(r.get('next_funding_ms'))}</b>"
         )
-    lines.append("\n<i>Buy long-leg, short rich-leg. Updated each cycle.</i>")
     return "\n".join(lines)
 
 
@@ -67,6 +69,7 @@ WELCOME = (
     "and ping you when an opportunity matches your filters.\n\n"
     "🔥 <b>Live Top</b> — best spreads right now\n"
     "⚙️ <b>Set Filters</b> — your alert thresholds\n"
+    "📊 <b>My Filters</b> — review &amp; exclude venues\n"
     "🔔 <b>Alerts</b> — toggle push notifications\n\n"
-    "Pick an option below 👇"
+    "Use the menu below to get started 👇"
 )

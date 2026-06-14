@@ -13,6 +13,8 @@ body {
 
 body {
   @apply bg-base-900 text-slate-200 antialiased;
+  /* Never let a stray wide element break the mobile viewport. */
+  overflow-x: hidden;
   background-image:
     radial-gradient(
       60rem 60rem at 110% -10%,

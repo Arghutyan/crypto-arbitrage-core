@@ -31,6 +31,14 @@ export function spreadColorClass(value: number | null): string {
   return "text-slate-400";
 }
 
+/** Generic signed-value color: green when earning, red when paying. */
+export function signedColorClass(value: number | null): string {
+  if (value == null) return "text-slate-500";
+  if (value > 0) return "text-emerald-400";
+  if (value < 0) return "text-rose-400";
+  return "text-slate-400";
+}
+
 /** Milliseconds-until-funding -> "Hh Mm Ss" countdown string. */
 export function formatCountdown(nextMs: number | null): string {
   if (!nextMs) return "—";
@@ -42,6 +50,12 @@ export function formatCountdown(nextMs: number | null): string {
   if (h > 0) return `${h}h ${m}m ${s}s`;
   if (m > 0) return `${m}m ${s}s`;
   return `${s}s`;
+}
+
+/** Funding interval in hours -> compact label, e.g. `8h`, `4h`, `0.5h`. */
+export function formatInterval(hours: number | null): string {
+  if (hours == null || hours <= 0) return "—";
+  return `${Math.round(hours * 100) / 100}h`;
 }
 
 /** Stable key for an opportunity (asset + venue direction). */

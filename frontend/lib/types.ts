@@ -14,6 +14,8 @@ export interface LiveSpread {
   real_spread_pct: number | null;
   long_funding: number | null;
   short_funding: number | null;
+  long_funding_interval_h: number | null;
+  short_funding_interval_h: number | null;
   net_funding_24h_pct: number | null;
   farm_24h_pct: number | null;
   farm_72h_pct: number | null;

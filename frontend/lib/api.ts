@@ -43,3 +43,16 @@ export function fetchSpreadHistory(
 ): Promise<SpreadHistoryResponse> {
   return fetcher<SpreadHistoryResponse>(spreadHistoryPath(asset, ex1, ex2));
 }
+
+/** Add a base asset to the server-side blacklist. Returns the stored symbol. */
+export async function blacklistSymbol(symbol: string): Promise<string> {
+  const res = await fetch(
+    `${API_BASE_URL}/api/v1/blacklist/${encodeURIComponent(symbol)}`,
+    { method: "POST", headers: { Accept: "application/json" } },
+  );
+  if (!res.ok) {
+    throw new Error(`Blacklist failed (${res.status})`);
+  }
+  const data = (await res.json()) as { symbol: string };
+  return data.symbol;
+}

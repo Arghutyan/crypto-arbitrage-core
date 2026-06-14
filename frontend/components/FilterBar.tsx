@@ -23,7 +23,7 @@ export default function FilterBar({ filters, onChange }: FilterBarProps) {
       </span>
 
       <div className="inline-flex items-center gap-1 rounded-full border border-white/10 bg-base-800/60 p-1">
-        <TrendingUp className="ml-2 h-3.5 w-3.5 text-slate-500" />
+        <TrendingUp className="ml-2 h-3.5 w-3.5 shrink-0 text-slate-500" />
         {SPREAD_PRESETS.map((preset) => {
           const on = filters.minSpread === preset;
           return (
@@ -31,11 +31,12 @@ export default function FilterBar({ filters, onChange }: FilterBarProps) {
               key={preset}
               type="button"
               onClick={() => onChange({ ...filters, minSpread: preset })}
+              aria-pressed={on}
               className={[
-                "rounded-full px-3 py-1 text-xs font-medium transition-colors",
+                "inline-flex min-h-[40px] items-center rounded-full px-3.5 text-sm font-medium transition-colors",
                 on
                   ? "bg-accent/20 text-accent"
-                  : "text-slate-400 hover:text-slate-200",
+                  : "text-slate-400 hover:text-slate-200 active:text-white",
               ].join(" ")}
             >
               {preset === 0 ? "All" : `>${preset}%`}
@@ -51,7 +52,7 @@ export default function FilterBar({ filters, onChange }: FilterBarProps) {
         }
         aria-pressed={filters.fundingPositive}
         className={[
-          "inline-flex items-center gap-2 rounded-full border px-3.5 py-1.5 text-sm font-medium transition-all",
+          "inline-flex min-h-[44px] items-center gap-2 rounded-full border px-4 text-sm font-medium transition-all",
           filters.fundingPositive
             ? "border-emerald-500/40 bg-emerald-500/15 text-emerald-300 shadow-glow"
             : "border-white/10 bg-base-800/60 text-slate-400 hover:border-white/20 hover:text-slate-200",

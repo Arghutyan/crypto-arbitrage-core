@@ -1,11 +1,41 @@
-"""Inline keyboard layouts, tuned for narrow phone screens."""
+"""Keyboard layouts, tuned for narrow phone screens.
+
+The persistent bottom navigation is a :class:`ReplyKeyboardMarkup` (basic
+navigation), while contextual actions inside a message use inline keyboards.
+"""
 
 from __future__ import annotations
 
-from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
-from aiogram.utils.keyboard import InlineKeyboardBuilder
+from aiogram.types import (
+    InlineKeyboardButton,
+    InlineKeyboardMarkup,
+    ReplyKeyboardMarkup,
+)
+from aiogram.utils.keyboard import InlineKeyboardBuilder, ReplyKeyboardBuilder
 
 from arbitrage.config import EXCHANGE_SPECS
+
+# Persistent reply-keyboard button labels. Shared with the handlers so the
+# text routing and the rendered buttons can never drift apart.
+BTN_LIVE_TOP = "🔥 Live Top"
+BTN_SET_FILTERS = "⚙️ Set Filters"
+BTN_MY_FILTERS = "📊 My Filters"
+BTN_TOGGLE_ALERTS = "🔔 Alerts"
+
+
+def main_reply_menu() -> ReplyKeyboardMarkup:
+    """The always-visible bottom navigation bar."""
+    builder = ReplyKeyboardBuilder()
+    builder.button(text=BTN_LIVE_TOP)
+    builder.button(text=BTN_SET_FILTERS)
+    builder.button(text=BTN_MY_FILTERS)
+    builder.button(text=BTN_TOGGLE_ALERTS)
+    builder.adjust(1, 2, 1)
+    return builder.as_markup(
+        resize_keyboard=True,
+        is_persistent=True,
+        input_field_placeholder="Tap a button or send a command…",
+    )
 
 
 def main_menu(alerts_enabled: bool = True) -> InlineKeyboardMarkup:

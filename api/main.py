@@ -61,6 +61,8 @@ class LiveSpread(BaseModel):
     real_spread_pct: Optional[float] = None
     long_funding: Optional[float] = None
     short_funding: Optional[float] = None
+    long_funding_interval_h: Optional[float] = None
+    short_funding_interval_h: Optional[float] = None
     net_funding_24h_pct: Optional[float] = None
     farm_24h_pct: Optional[float] = None
     farm_72h_pct: Optional[float] = None
@@ -79,6 +81,11 @@ class SpreadHistoryResponse(BaseModel):
     ex1: str
     ex2: str
     points: list[SpreadHistoryPoint]
+
+
+class BlacklistResponse(BaseModel):
+    symbol: str
+    status: str = "blacklisted"
 
 
 # --------------------------------------------------------------------------- #
@@ -172,3 +179,28 @@ async def spread_history(
         ex2=ex2,
         points=[SpreadHistoryPoint(**p) for p in points],
     )
+
+
+@app.post(
+    "/api/v1/blacklist/{symbol}",
+    response_model=BlacklistResponse,
+    status_code=201,
+    tags=["blacklist"],
+)
+async def blacklist_symbol(symbol: str, request: Request) -> BlacklistResponse:
+    """Add a base asset to the shared ``symbol_blacklist`` table.
+
+    The engine reads this table every scan cycle, so the asset stops being
+    scanned/served from the next cycle onward. Idempotent: re-adding an
+    existing symbol just refreshes it.
+    """
+    db: Database = request.app.state.db
+    try:
+        normalized = await db.add_to_blacklist(symbol, reason="web-ui")
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:  # noqa: BLE001
+        log.exception("Failed to blacklist %s", symbol)
+        raise HTTPException(status_code=503, detail="database write failed") from exc
+    log.info("Blacklisted %s via web UI", normalized)
+    return BlacklistResponse(symbol=normalized)

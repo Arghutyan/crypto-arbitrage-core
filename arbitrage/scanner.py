@@ -165,6 +165,12 @@ class Scanner:
         short_leg = parse_funding(short_fr)
         opp.long_funding = long_leg.rate
         opp.short_funding = short_leg.rate
+        # Only report an interval when the leg actually carried funding data;
+        # otherwise leave it unknown rather than showing the 8h default.
+        if long_leg.rate is not None or long_leg.next_funding_ms is not None:
+            opp.long_funding_interval_h = long_leg.interval_hours
+        if short_leg.rate is not None or short_leg.next_funding_ms is not None:
+            opp.short_funding_interval_h = short_leg.interval_hours
         opp.next_funding_ms = _soonest(
             long_leg.next_funding_ms, short_leg.next_funding_ms
         )

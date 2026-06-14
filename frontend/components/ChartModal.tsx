@@ -58,21 +58,33 @@ export default function ChartModal({ opportunity, onClose }: ChartModalProps) {
     label: hourLabel(p.time),
   }));
 
+  // Dynamic Y domain with ~12% padding so small spread moves aren't flattened
+  // against a fixed 0-based axis.
+  const yDomain = ((): [number, number] => {
+    if (points.length === 0) return [0, 1];
+    const values = points.map((p) => p.spread_pct);
+    const lo = Math.min(...values);
+    const hi = Math.max(...values);
+    const span = hi - lo;
+    const pad = span > 0 ? span * 0.12 : Math.max(Math.abs(hi) * 0.1, 0.05);
+    return [lo - pad, hi + pad];
+  })();
+
   return (
     <div
       className="fixed inset-0 z-50 flex items-end justify-center bg-black/70 p-0 backdrop-blur-sm sm:items-center sm:p-4"
       onClick={onClose}
     >
       <div
-        className="w-full max-w-3xl rounded-t-3xl border border-white/10 bg-base-850 p-5 shadow-glow sm:rounded-3xl"
+        className="max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-t-3xl border border-white/10 bg-base-850 p-5 shadow-glow sm:rounded-3xl"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between">
-          <div>
-            <h3 className="font-mono text-lg font-semibold text-slate-100">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <h3 className="truncate font-mono text-lg font-semibold text-slate-100">
               {opportunity.asset} · 3-Day Spread
             </h3>
-            <p className="text-xs text-slate-500">
+            <p className="truncate text-xs text-slate-500">
               {opportunity.long_exchange} → {opportunity.short_exchange} ·
               hourly
             </p>
@@ -80,10 +92,10 @@ export default function ChartModal({ opportunity, onClose }: ChartModalProps) {
           <button
             type="button"
             onClick={onClose}
-            className="rounded-lg border border-white/10 p-2 text-slate-400 transition-colors hover:bg-white/5 hover:text-slate-200"
+            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-white/10 text-slate-400 transition-colors hover:bg-white/5 hover:text-slate-200 active:bg-white/10"
             aria-label="Close"
           >
-            <X className="h-4 w-4" />
+            <X className="h-5 w-5" />
           </button>
         </div>
 
@@ -125,19 +137,28 @@ export default function ChartModal({ opportunity, onClose }: ChartModalProps) {
                   stroke="rgba(255,255,255,0.1)"
                 />
                 <YAxis
+                  domain={yDomain}
                   tick={{ fill: "#64748b", fontSize: 10 }}
-                  tickFormatter={(v: number) => `${v.toFixed(1)}%`}
+                  tickFormatter={(v: number) => `${v.toFixed(2)}%`}
                   stroke="rgba(255,255,255,0.1)"
-                  width={50}
+                  width={56}
+                  allowDecimals
                 />
                 <Tooltip
+                  cursor={{
+                    stroke: "rgba(91,140,255,0.5)",
+                    strokeWidth: 1,
+                    strokeDasharray: "4 4",
+                  }}
                   contentStyle={{
                     background: "#0d121d",
-                    border: "1px solid rgba(255,255,255,0.1)",
+                    border: "1px solid rgba(255,255,255,0.12)",
                     borderRadius: 12,
                     fontSize: 12,
+                    boxShadow: "0 8px 30px rgba(0,0,0,0.5)",
                   }}
-                  labelStyle={{ color: "#94a3b8" }}
+                  labelStyle={{ color: "#94a3b8", marginBottom: 4 }}
+                  itemStyle={{ color: "#e2e8f0" }}
                   formatter={(value: number) => [
                     formatPercent(value, 3),
                     "Spread",
@@ -147,8 +168,15 @@ export default function ChartModal({ opportunity, onClose }: ChartModalProps) {
                   type="monotone"
                   dataKey="spread_pct"
                   stroke="#5b8cff"
-                  strokeWidth={2}
+                  strokeWidth={2.5}
                   fill="url(#spreadFill)"
+                  dot={false}
+                  activeDot={{
+                    r: 4,
+                    fill: "#5b8cff",
+                    stroke: "#0d121d",
+                    strokeWidth: 2,
+                  }}
                 />
               </AreaChart>
             </ResponsiveContainer>

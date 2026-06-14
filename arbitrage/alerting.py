@@ -57,18 +57,44 @@ def blacklist_markup(opp: Opportunity) -> dict:
     }
 
 
+def _countdown(next_ms: Optional[int]) -> str:
+    """Human countdown to the next funding settlement, e.g. ``2h 14m``."""
+    if not next_ms:
+        return "—"
+    remaining = next_ms / 1000.0 - time.time()
+    if remaining <= 0:
+        return "now"
+    hours = int(remaining // 3600)
+    minutes = int((remaining % 3600) // 60)
+    if hours > 0:
+        return f"{hours}h {minutes}m"
+    return f"{minutes}m"
+
+
 def format_alert(opp: Opportunity) -> str:
-    """Compact, emoji-rich push body."""
-    spread = opp.real_spread_pct if opp.real_spread_pct is not None else opp.raw_spread_pct
+    """Terminal-style push body using strict Telegram HTML.
+
+    The spread is wrapped in a spoiler so a glance at the chat list does not
+    leak the edge before the user opens the alert.
+    """
+    spread = (
+        opp.real_spread_pct
+        if opp.real_spread_pct is not None
+        else opp.raw_spread_pct
+    )
     funding = opp.net_funding_24h_pct or 0.0
-    farm = opp.farm_24h_pct
     lines = [
-        f"🚨 <b>{opp.asset}</b>  Spread: <b>{spread:.2f}%</b>",
-        f"📈 {opp.long_exchange} → {opp.short_exchange}",
+        f"🚨 <b>{opp.asset}</b> | Spread: "
+        f'<span class="tg-spoiler"><b>{spread:+.2f}%</b></span>',
+        f"🏦 {opp.long_exchange} ➡️ {opp.short_exchange}",
         f"💰 Funding 24h: <b>{funding:+.3f}%</b>",
     ]
-    if farm is not None:
-        lines.append(f"🌾 Farm 24h: {farm:+.3f}%  |  72h: {opp.farm_72h_pct:+.3f}%")
+    if opp.farm_24h_pct is not None and opp.farm_72h_pct is not None:
+        lines.append(
+            f"🌾 Farm: 24h <b>{opp.farm_24h_pct:+.2f}%</b> · "
+            f"72h <b>{opp.farm_72h_pct:+.2f}%</b>"
+        )
+    lines.append(f"⏱ Next Funding in: <b>{_countdown(opp.next_funding_ms)}</b>")
     return "\n".join(lines)
 
 

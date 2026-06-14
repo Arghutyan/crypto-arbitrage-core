@@ -22,13 +22,24 @@ export default function CountdownTimer({
   }, []);
 
   const label = formatCountdown(nextMs);
-  const urgent = nextMs != null && nextMs - Date.now() < 5 * 60 * 1000;
+  const remainingMs = nextMs != null ? nextMs - Date.now() : null;
+  // Tiered urgency: <5m is critical (red), <1h is soon (orange) and pulses.
+  const critical = remainingMs != null && remainingMs > 0 && remainingMs < 5 * 60 * 1000;
+  const soon =
+    remainingMs != null && remainingMs > 0 && remainingMs < 60 * 60 * 1000;
+
+  const tone = critical
+    ? "text-rose-400"
+    : soon
+      ? "text-amber-400"
+      : "text-slate-400";
 
   return (
     <span
       className={[
         "inline-flex items-center gap-1 font-mono tabular-nums",
-        urgent ? "text-amber-300" : "text-slate-400",
+        tone,
+        soon ? "animate-pulse font-semibold" : "",
         className,
       ].join(" ")}
     >
