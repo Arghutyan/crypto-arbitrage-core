@@ -149,16 +149,27 @@ jobs:
             set -euo pipefail
             export KUBECONFIG=~/.kube/config
 
-            # Create or update the application Secret from the GitHub Actions
-            # secrets (idempotent apply), before rolling the pods so they pick
-            # up the fresh values on restart.
+            # 1. Upsert the application Secret so pods pick up fresh values.
             kubectl create secret generic spread-app-secrets \
               --from-literal=TELEGRAM_BOT_TOKEN="${TELEGRAM_BOT_TOKEN}" \
               --from-literal=TELEGRAM_ADMIN_IDS="${TELEGRAM_ADMIN_IDS:-}" \
               --from-literal=POSTGRES_PASSWORD="${POSTGRES_PASSWORD}" \
               --dry-run=client -o yaml | kubectl apply -f -
 
+            # 2. Apply all manifests so any new/changed resources reach the
+            #    cluster before we ask for a rollout (fixes NotFound errors
+            #    on first deploy or after manifest renames).
+            kubectl apply -f ~/spread+dev/k8s/
+
+            # 3. Roll the Deployments — names must match metadata.name exactly.
             kubectl rollout restart deployment/crypto-arb-engine
             kubectl rollout restart deployment/crypto-api
             kubectl rollout restart deployment/crypto-bot
             kubectl rollout restart deployment/crypto-frontend
+
+            # 4. Wait for all rollouts to finish so the pipeline reflects the
+            #    real outcome rather than silently leaving pods in a bad state.
+            kubectl rollout status deployment/crypto-arb-engine --timeout=120s
+            kubectl rollout status deployment/crypto-api        --timeout=120s
+            kubectl rollout status deployment/crypto-bot        --timeout=120s
+            kubectl rollout status deployment/crypto-frontend   --timeout=120s
