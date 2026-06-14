@@ -77,11 +77,12 @@ metadata:
   labels:
     app: crypto-frontend
 spec:
-  type: ClusterIP
+  type: NodePort
   selector:
     app: crypto-frontend
   ports:
     - name: http
       port: 80
       targetPort: 3000
+      nodePort: 30000
       protocol: TCP
