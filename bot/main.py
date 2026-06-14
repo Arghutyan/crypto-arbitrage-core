@@ -34,10 +34,15 @@ def _setup_logging() -> None:
 async def main() -> None:
     _setup_logging()
     log = logging.getLogger("bot")
+    log.info("Starting Spread+ screener bot…")
 
     tg = load_telegram_settings()
     if not tg.enabled:
-        raise SystemExit("TELEGRAM_BOT_TOKEN is required to run the bot")
+        log.error(
+            "TELEGRAM_BOT_TOKEN is not set — the bot cannot start. "
+            "Add it to your .env (see .env.example) and restart the service."
+        )
+        raise SystemExit(1)
 
     db = Database(load_db_settings())
     await db.connect()
@@ -68,7 +73,8 @@ async def main() -> None:
 
 
 if __name__ == "__main__":
+    _setup_logging()
     try:
         asyncio.run(main())
-    except (KeyboardInterrupt, SystemExit):
-        pass
+    except KeyboardInterrupt:
+        logging.getLogger("bot").info("Bot stopped (keyboard interrupt)")

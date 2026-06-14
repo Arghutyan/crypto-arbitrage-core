@@ -32,7 +32,18 @@ from arbitrage.klines import fetch_spread_history
 log = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
 
-_CORS_ORIGINS = os.getenv("CORS_ORIGINS", "*").split(",")
+
+def _parse_cors_origins() -> list[str]:
+    """Allowed browser origins, comma-separated. Defaults to the local
+    Next.js dev server so the dashboard works out of the box."""
+    raw = os.getenv("CORS_ORIGINS", "http://localhost:3000")
+    return [o.strip() for o in raw.split(",") if o.strip()]
+
+
+_CORS_ORIGINS = _parse_cors_origins()
+# A wildcard origin is invalid alongside credentials per the CORS spec, so we
+# only advertise credentials support when the origins are explicit.
+_ALLOW_ALL_ORIGINS = "*" in _CORS_ORIGINS
 
 
 # --------------------------------------------------------------------------- #
@@ -95,11 +106,12 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[o.strip() for o in _CORS_ORIGINS if o.strip()],
-    allow_credentials=True,
+    allow_origins=_CORS_ORIGINS,
+    allow_credentials=not _ALLOW_ALL_ORIGINS,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+log.info("CORS allowed origins: %s", _CORS_ORIGINS)
 
 
 # --------------------------------------------------------------------------- #
