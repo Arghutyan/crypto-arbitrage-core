@@ -129,6 +129,16 @@ jobs:
 
           echo "All required deployment secrets are present."
 
+      - name: Copy k8s manifests to server
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SERVER_SSH_KEY }}
+          port: 22
+          source: "k8s"
+          target: "~/app-deploy"
+
       - name: Deploy to server (sync secret + rollout restart)
         uses: appleboy/ssh-action@v1.0.3
         env:
@@ -159,7 +169,7 @@ jobs:
             # 2. Apply all manifests so any new/changed resources reach the
             #    cluster before we ask for a rollout (fixes NotFound errors
             #    on first deploy or after manifest renames).
-            kubectl apply -f ~/spread+dev/k8s/
+            kubectl apply -f ~/app-deploy/k8s/
 
             # 3. Roll the Deployments — names must match metadata.name exactly.
             kubectl rollout restart deployment/crypto-arb-engine
