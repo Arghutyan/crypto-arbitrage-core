@@ -1,8 +1,8 @@
-"""Static configuration for the arbitrage engine.
+"""Runtime configuration for the delta-neutral funding arbitrage engine.
 
-Everything that is likely to change between deployments lives here so the
-rest of the code can stay declarative. Values can be overridden via
-environment variables to keep the service container-friendly.
+Everything that changes between deployments is centralised here and can be
+overridden through environment variables so the same image runs unchanged in
+docker-compose and Kubernetes.
 """
 
 from __future__ import annotations
@@ -12,60 +12,126 @@ from dataclasses import dataclass, field
 
 
 @dataclass(frozen=True)
-class ExchangeConfig:
-    """Identifies a single exchange/market we want to monitor.
+class ExchangeSpec:
+    """Describes one venue we scan.
 
-    ``id`` is the ccxt exchange id (e.g. ``"binance"``, ``"gate"``).
-    ``symbol`` is the unified ccxt symbol for the perpetual futures market.
-    For USDT-margined perpetuals ccxt uses the ``BASE/QUOTE:SETTLE`` form,
-    e.g. ``"ACE/USDT:USDT"``.
+    ``id`` is the ccxt exchange id. ``options`` are passed straight to the ccxt
+    constructor (mainly ``defaultType`` so we load perpetual-swap markets).
     """
 
     name: str
     id: str
-    symbol: str
-    # Passed straight through to the ccxt constructor (e.g. defaultType).
-    options: dict = field(default_factory=dict)
+    options: dict = field(default_factory=lambda: {"defaultType": "swap"})
+
+
+# The eleven venues requested. ccxt id notes:
+#   * ``gate``           — Gate.io (the old ``gateio`` alias was dropped in ccxt 4.5).
+#   * ``kucoinfutures``  — KuCoin perpetuals (the spot ``kucoin`` id has no swaps).
+#   * ``htx``            — Huobi/HTX.
+#   * ``aster``/``xt``   — Aster DEX perps and XT.com perpetuals.
+EXCHANGE_SPECS: tuple[ExchangeSpec, ...] = (
+    ExchangeSpec("Binance", "binance"),
+    ExchangeSpec("Bybit", "bybit"),
+    ExchangeSpec("OKX", "okx"),
+    ExchangeSpec("Gate.io", "gate"),
+    ExchangeSpec("MEXC", "mexc"),
+    ExchangeSpec("KuCoin", "kucoinfutures", options={}),
+    ExchangeSpec("HTX", "htx"),
+    ExchangeSpec("Bitget", "bitget"),
+    ExchangeSpec("Hyperliquid", "hyperliquid", options={}),
+    ExchangeSpec("Aster", "aster", options={}),
+    ExchangeSpec("XT", "xt"),
+)
 
 
 @dataclass(frozen=True)
 class Settings:
-    """Top-level runtime settings for the engine."""
+    """Top-level engine settings."""
 
-    # The pair we are arbitraging, used only for display/logging.
-    pair: str = "ACE/USDT"
+    # Quote/settle currencies considered comparable across venues. USDT and
+    # USDC perpetuals trade close enough to 1:1 to arbitrage on price spread.
+    quote_currencies: tuple[str, ...] = ("USDT", "USDC")
 
-    # How often (seconds) we poll the REST endpoints and emit a log line.
-    poll_interval: float = 5.0
+    # Step 1 — discard anything below this raw (mid-price) spread, in percent.
+    min_raw_spread_pct: float = 0.2
 
-    # Per-request network timeout in seconds.
-    request_timeout: float = 10.0
+    # Step 2 — how many of the widest raw spreads get the expensive L2 /
+    # order-book + funding treatment each cycle.
+    top_n_orderbooks: int = 50
 
-    exchanges: tuple[ExchangeConfig, ...] = (
-        ExchangeConfig(
-            name="Binance",
-            id="binance",
-            symbol="ACE/USDT:USDT",
-            options={"defaultType": "swap"},
-        ),
-        ExchangeConfig(
-            name="Gate",
-            id="gate",
-            symbol="ACE/USDT:USDT",
-            options={"defaultType": "swap"},
-        ),
-    )
+    # Notional used when walking the order book to estimate realistic slippage.
+    order_size_usd: float = 1000.0
+
+    # Seconds between full scan cycles.
+    poll_interval: float = 30.0
+
+    # Per-request ccxt network timeout, seconds.
+    request_timeout: float = 20.0
+
+    # Maximum exchanges hit concurrently for the heavy (order-book) phase.
+    orderbook_concurrency: int = 20
+
+    exchanges: tuple[ExchangeSpec, ...] = EXCHANGE_SPECS
 
 
 @dataclass(frozen=True)
 class DbSettings:
-    """Connection parameters for the PostgreSQL persistence layer."""
+    """PostgreSQL connection parameters."""
 
     host: str = "postgres-service"
     port: int = 5432
     user: str = "db_user"
     password: str = "changeme"
     name: str = "crypto_analytics"
+
+    @property
+    def dsn(self) -> str:
+        return (
+            f"postgresql://{self.user}:{self.password}"
+            f"@{self.host}:{self.port}/{self.name}"
+        )
+
+
+@dataclass(frozen=True)
+class TelegramSettings:
+    """Telegram bot credentials shared by the bot and the alerting engine."""
+
+    token: str = ""
+    # Cooldown (seconds) before the same opportunity can alert a user again.
+    alert_cooldown: float = 900.0
+    # Telegram user ids allowed to manage the symbol blacklist. Admins also get
+    # an inline "blacklist this pair" button on every alert they receive.
+    admin_ids: frozenset[int] = frozenset()
+
+    @property
+    def enabled(self) -> bool:
+        return bool(self.token)
+
+    def is_admin(self, telegram_id: int) -> bool:
+        return telegram_id in self.admin_ids
+
+
+def _parse_admin_ids(raw: str) -> frozenset[int]:
+    """Parse a comma/space separated list of Telegram ids into a set."""
+    ids: set[int] = set()
+    for chunk in raw.replace(",", " ").split():
+        try:
+            ids.add(int(chunk))
+        except ValueError:
+            continue
+    return frozenset(ids)
+
+
+def load_settings() -> Settings:
+    """Build :class:`Settings` applying environment overrides."""
+    return Settings(
+        min_raw_spread_pct=float(os.getenv("ARB_MIN_RAW_SPREAD", "0.2")),
+        top_n_orderbooks=int(os.getenv("ARB_TOP_N", "50")),
+        order_size_usd=float(os.getenv("ARB_ORDER_SIZE_USD", "1000")),
+        poll_interval=float(os.getenv("ARB_POLL_INTERVAL", "30")),
+        request_timeout=float(os.getenv("ARB_REQUEST_TIMEOUT", "20")),
+        orderbook_concurrency=int(os.getenv("ARB_OB_CONCURRENCY", "20")),
+    )
 
 
 def load_db_settings() -> DbSettings:
@@ -79,11 +145,10 @@ def load_db_settings() -> DbSettings:
     )
 
 
-def load_settings() -> Settings:
-    """Build :class:`Settings`, applying environment-variable overrides."""
-
-    return Settings(
-        pair=os.getenv("ARB_PAIR", "ACE/USDT"),
-        poll_interval=float(os.getenv("ARB_POLL_INTERVAL", "5")),
-        request_timeout=float(os.getenv("ARB_REQUEST_TIMEOUT", "10")),
+def load_telegram_settings() -> TelegramSettings:
+    """Build :class:`TelegramSettings` from environment variables."""
+    return TelegramSettings(
+        token=os.getenv("TELEGRAM_BOT_TOKEN", ""),
+        alert_cooldown=float(os.getenv("ALERT_COOLDOWN_SECONDS", "900")),
+        admin_ids=_parse_admin_ids(os.getenv("TELEGRAM_ADMIN_IDS", "")),
     )

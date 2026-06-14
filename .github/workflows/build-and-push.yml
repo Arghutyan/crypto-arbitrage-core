@@ -7,8 +7,9 @@ on:
 
 env:
   REGISTRY: ghcr.io
+  # Single backend image serves all three roles (engine / api / bot); the
+  # container command selects the role. There is no separate API image.
   CORE_IMAGE: ghcr.io/arghutyan/crypto-arbitrage-core
-  API_IMAGE: ghcr.io/arghutyan/crypto-arbitrage-api
   FRONTEND_IMAGE: ghcr.io/arghutyan/crypto-arbitrage-frontend
 
 jobs:
@@ -52,26 +53,6 @@ jobs:
           labels: ${{ steps.meta-core.outputs.labels }}
           cache-from: type=gha,scope=core
           cache-to: type=gha,mode=max,scope=core
-
-      - name: Extract metadata for API image
-        id: meta-api
-        uses: docker/metadata-action@v5
-        with:
-          images: ${{ env.API_IMAGE }}
-          tags: |
-            type=raw,value=latest
-            type=sha,format=short
-
-      - name: Build and push API image
-        uses: docker/build-push-action@v6
-        with:
-          context: ./api
-          file: ./api/Dockerfile
-          push: true
-          tags: ${{ steps.meta-api.outputs.tags }}
-          labels: ${{ steps.meta-api.outputs.labels }}
-          cache-from: type=gha,scope=api
-          cache-to: type=gha,mode=max,scope=api
 
       - name: Extract metadata for frontend image
         id: meta-frontend
@@ -150,3 +131,5 @@ jobs:
             export KUBECONFIG=~/.kube/config
             kubectl rollout restart deployment/crypto-arb-engine
             kubectl rollout restart deployment/crypto-api
+            kubectl rollout restart deployment/crypto-bot
+            kubectl rollout restart deployment/crypto-frontend

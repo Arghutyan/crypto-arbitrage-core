@@ -1,80 +1,45 @@
-import type { SpreadRecord, SpreadRow } from "./types";
-
-const EXCHANGE_BINANCE = "Binance";
-const EXCHANGE_GATE = "Gate";
+import type { LiveSpread, SpreadHistoryResponse } from "./types";
 
 /**
- * Base URL of the FastAPI backend. Configurable at build/runtime via
- * `NEXT_PUBLIC_API_URL`; defaults to the local dev server.
+ * Base URL of the FastAPI backend. Configurable via `NEXT_PUBLIC_API_URL`;
+ * defaults to the local dev server.
  */
 export const API_BASE_URL = (
   process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000"
 ).replace(/\/$/, "");
 
-/**
- * Convert a raw backend record into a normalized row for the table.
- *
- * The backend tracks two venues (Binance & Gate). We treat the cheaper venue
- * as the "buy" side and the pricier as the "sell" side — the natural direction
- * of an arbitrage trade.
- */
-export function toSpreadRow(record: SpreadRecord): SpreadRow {
-  const { binance_price, gate_price } = record;
-
-  // Default orientation: buy Binance / sell Gate.
-  let buyExchange = EXCHANGE_BINANCE;
-  let sellExchange = EXCHANGE_GATE;
-  let buyPrice = binance_price;
-  let sellPrice = gate_price;
-  let buyFunding = record.binance_funding;
-  let sellFunding = record.gate_funding;
-
-  // Flip when Gate is cheaper, so "buy" is always the lower price.
-  if (
-    binance_price != null &&
-    gate_price != null &&
-    gate_price < binance_price
-  ) {
-    buyExchange = EXCHANGE_GATE;
-    sellExchange = EXCHANGE_BINANCE;
-    buyPrice = gate_price;
-    sellPrice = binance_price;
-    buyFunding = record.gate_funding;
-    sellFunding = record.binance_funding;
+/** Generic JSON fetcher used by SWR. */
+export async function fetcher<T>(path: string): Promise<T> {
+  const res = await fetch(`${API_BASE_URL}${path}`, {
+    headers: { Accept: "application/json" },
+    cache: "no-store",
+  });
+  if (!res.ok) {
+    throw new Error(`Backend returned ${res.status} for ${path}`);
   }
-
-  return {
-    id: record.id,
-    timestamp: record.timestamp,
-    pair: record.pair,
-    buyExchange,
-    buyPrice,
-    sellExchange,
-    sellPrice,
-    spreadPct: record.spread_pct,
-    buyFunding,
-    sellFunding,
-  };
+  return (await res.json()) as T;
 }
 
-/**
- * Fetch the latest spreads from the backend and normalize them for display.
- *
- * Runs on the server (App Router). `cache: "no-store"` keeps the dashboard
- * live rather than serving a statically cached snapshot.
- */
-export async function fetchLatestSpreads(): Promise<SpreadRow[]> {
-  const res = await fetch(`${API_BASE_URL}/api/v1/spreads/latest`, {
-    cache: "no-store",
-    headers: { Accept: "application/json" },
-  });
+export const LIVE_SPREADS_PATH = "/api/v1/spreads/live";
 
-  if (!res.ok) {
-    throw new Error(
-      `Backend returned ${res.status} ${res.statusText} for /api/v1/spreads/latest`,
-    );
-  }
+export function fetchLiveSpreads(): Promise<LiveSpread[]> {
+  return fetcher<LiveSpread[]>(LIVE_SPREADS_PATH);
+}
 
-  const data = (await res.json()) as SpreadRecord[];
-  return data.map(toSpreadRow);
+export function spreadHistoryPath(
+  asset: string,
+  ex1: string,
+  ex2: string,
+): string {
+  return `/api/v1/spread-history/${encodeURIComponent(
+    asset,
+  )}/${encodeURIComponent(ex1)}/${encodeURIComponent(ex2)}`;
+}
+
+export function fetchSpreadHistory(
+  asset: string,
+  ex1: string,
+  ex2: string,
+): Promise<SpreadHistoryResponse> {
+  return fetcher<SpreadHistoryResponse>(spreadHistoryPath(asset, ex1, ex2));
 }

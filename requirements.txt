@@ -1,10 +1,16 @@
-aiodns==4.0.4
+# Shared backend image dependencies. The same image runs three roles
+# (engine / api / bot), differentiated only by the container command.
+
+# --- core / engine ---
+ccxt==4.5.58
 asyncpg==0.30.0
+# Pinned to the highest aiohttp that satisfies both ccxt (>=3.10.11) and
+# aiogram 3.15 (<3.11). Bumping past 3.11 breaks the bot's dependency solve.
+aiohttp==3.10.11
+aiodns==4.0.4
 aiohappyeyeballs==2.6.2
-aiohttp==3.14.1
 aiosignal==1.4.0
 attrs==26.1.0
-ccxt==4.5.58
 certifi==2026.5.20
 cffi==2.0.0
 charset-normalizer==3.4.7
@@ -21,3 +27,12 @@ setuptools==82.0.1
 typing_extensions==4.15.0
 urllib3==2.7.0
 yarl==1.24.2
+
+# --- api (FastAPI) ---
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+# aiogram 3.15 caps pydantic <2.10; 2.9.2 also satisfies fastapi.
+pydantic==2.9.2
+
+# --- telegram bot ---
+aiogram==3.15.0

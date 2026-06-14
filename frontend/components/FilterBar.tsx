@@ -1,39 +1,20 @@
 "use client";
 
-import { useState } from "react";
-import {
-  Layers,
-  Ban,
-  Repeat,
-  TrendingUp,
-  SlidersHorizontal,
-  Check,
-} from "lucide-react";
+import { SlidersHorizontal, Sprout, TrendingUp } from "lucide-react";
 
-interface FilterOption {
-  id: string;
-  label: string;
-  icon: React.ElementType;
-  /** Whether the filter starts enabled. */
-  defaultOn?: boolean;
+export interface SpreadFilters {
+  minSpread: number;
+  fundingPositive: boolean;
 }
 
-// UI placeholders for now — wiring to real query params comes later.
-const FILTERS: FilterOption[] = [
-  { id: "spot-futures", label: "Spot + Futures", icon: Layers, defaultOn: true },
-  { id: "exclude-dex", label: "Exclude DEX", icon: Ban, defaultOn: true },
-  { id: "funding-arb", label: "Funding Arb", icon: Repeat },
-  { id: "high-spread", label: "Spread > 1%", icon: TrendingUp },
-];
+interface FilterBarProps {
+  filters: SpreadFilters;
+  onChange: (next: SpreadFilters) => void;
+}
 
-export default function FilterBar() {
-  const [active, setActive] = useState<Record<string, boolean>>(() =>
-    Object.fromEntries(FILTERS.map((f) => [f.id, Boolean(f.defaultOn)])),
-  );
+const SPREAD_PRESETS = [0, 0.5, 1, 2];
 
-  const toggle = (id: string) =>
-    setActive((prev) => ({ ...prev, [id]: !prev[id] }));
-
+export default function FilterBar({ filters, onChange }: FilterBarProps) {
   return (
     <div className="flex flex-wrap items-center gap-2.5">
       <span className="mr-1 hidden items-center gap-1.5 text-xs font-medium uppercase tracking-wider text-slate-500 sm:flex">
@@ -41,32 +22,44 @@ export default function FilterBar() {
         Filters
       </span>
 
-      {FILTERS.map(({ id, label, icon: Icon }) => {
-        const on = active[id];
-        return (
-          <button
-            key={id}
-            type="button"
-            onClick={() => toggle(id)}
-            aria-pressed={on}
-            className={[
-              "group inline-flex items-center gap-2 rounded-full border px-3.5 py-1.5 text-sm font-medium transition-all duration-150",
-              on
-                ? "border-accent/40 bg-accent/15 text-accent shadow-glow"
-                : "border-white/10 bg-base-800/60 text-slate-400 hover:border-white/20 hover:text-slate-200",
-            ].join(" ")}
-          >
-            <span className="relative flex h-4 w-4 items-center justify-center">
-              {on ? (
-                <Check className="h-3.5 w-3.5" />
-              ) : (
-                <Icon className="h-4 w-4" />
-              )}
-            </span>
-            {label}
-          </button>
-        );
-      })}
+      <div className="inline-flex items-center gap-1 rounded-full border border-white/10 bg-base-800/60 p-1">
+        <TrendingUp className="ml-2 h-3.5 w-3.5 text-slate-500" />
+        {SPREAD_PRESETS.map((preset) => {
+          const on = filters.minSpread === preset;
+          return (
+            <button
+              key={preset}
+              type="button"
+              onClick={() => onChange({ ...filters, minSpread: preset })}
+              className={[
+                "rounded-full px-3 py-1 text-xs font-medium transition-colors",
+                on
+                  ? "bg-accent/20 text-accent"
+                  : "text-slate-400 hover:text-slate-200",
+              ].join(" ")}
+            >
+              {preset === 0 ? "All" : `>${preset}%`}
+            </button>
+          );
+        })}
+      </div>
+
+      <button
+        type="button"
+        onClick={() =>
+          onChange({ ...filters, fundingPositive: !filters.fundingPositive })
+        }
+        aria-pressed={filters.fundingPositive}
+        className={[
+          "inline-flex items-center gap-2 rounded-full border px-3.5 py-1.5 text-sm font-medium transition-all",
+          filters.fundingPositive
+            ? "border-emerald-500/40 bg-emerald-500/15 text-emerald-300 shadow-glow"
+            : "border-white/10 bg-base-800/60 text-slate-400 hover:border-white/20 hover:text-slate-200",
+        ].join(" ")}
+      >
+        <Sprout className="h-4 w-4" />
+        Positive Farm
+      </button>
     </div>
   );
 }

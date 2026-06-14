@@ -1,10 +1,10 @@
 import { Activity, Gauge, TrendingUp, Layers } from "lucide-react";
-import type { SpreadRow } from "@/lib/types";
+import type { LiveSpread } from "@/lib/types";
 import { formatPercent } from "@/lib/format";
 
-function computeStats(rows: SpreadRow[]) {
+function computeStats(rows: LiveSpread[]) {
   const spreads = rows
-    .map((r) => r.spreadPct)
+    .map((r) => r.real_spread_pct ?? r.raw_spread_pct)
     .filter((v): v is number => v != null);
 
   const best = spreads.length ? Math.max(...spreads) : null;
@@ -12,13 +12,13 @@ function computeStats(rows: SpreadRow[]) {
     ? spreads.reduce((a, b) => a + b, 0) / spreads.length
     : null;
   const opportunities = spreads.filter((v) => v > 1).length;
-  const pairs = new Set(rows.map((r) => r.pair)).size;
+  const assets = new Set(rows.map((r) => r.asset)).size;
 
-  return { best, avg, opportunities, pairs };
+  return { best, avg, opportunities, assets };
 }
 
-export default function StatCards({ rows }: { rows: SpreadRow[] }) {
-  const { best, avg, opportunities, pairs } = computeStats(rows);
+export default function StatCards({ rows }: { rows: LiveSpread[] }) {
+  const { best, avg, opportunities, assets } = computeStats(rows);
 
   const cards = [
     {
@@ -40,8 +40,8 @@ export default function StatCards({ rows }: { rows: SpreadRow[] }) {
       accent: "text-emerald-300",
     },
     {
-      label: "Tracked Pairs",
-      value: pairs.toString(),
+      label: "Tracked Assets",
+      value: assets.toString(),
       icon: Layers,
       accent: "text-slate-200",
     },

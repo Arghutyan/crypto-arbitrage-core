@@ -1,16 +1,16 @@
-"""FastAPI microservice exposing crypto-arbitrage spread data.
+"""FastAPI service for the delta-neutral funding arbitrage SaaS.
 
-Reads from the same PostgreSQL ``spread_history`` table the engine writes to.
-Connection details come from environment variables (matching the engine and
-the K8s manifests):
+Endpoints
+---------
+* ``GET /health`` — liveness/readiness (verifies the DB is reachable).
+* ``GET /api/v1/spreads/live`` — the latest cached scan cycle for the UI.
+* ``GET /api/v1/spread-history/{asset}/{ex1}/{ex2}`` — 3 days of hourly spread
+  history computed on demand from ccxt OHLCV. Nothing is stored.
 
-    DB_HOST  (default: postgres-service)
-    DB_PORT  (default: 5432)
-    DB_USER  (default: db_user)
-    DB_PASSWORD (default: changeme)
-    DB_NAME  (default: crypto_analytics)
+The app imports the shared ``arbitrage`` package, so it must run from the repo
+root (the container sets ``WORKDIR /app`` with the package on the path).
 
-Run locally with:
+Run locally:
     uvicorn api.main:app --host 0.0.0.0 --port 8000
 """
 
@@ -19,80 +19,77 @@ from __future__ import annotations
 import logging
 import os
 from contextlib import asynccontextmanager
-from datetime import datetime
 from typing import AsyncIterator, Optional
 
-import asyncpg
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+
+from arbitrage.config import load_db_settings
+from arbitrage.database import Database
+from arbitrage.klines import fetch_spread_history
 
 log = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
 
-# --------------------------------------------------------------------------- #
-# Configuration
-# --------------------------------------------------------------------------- #
-
-
-def _build_dsn() -> str:
-    host = os.getenv("DB_HOST", "postgres-service")
-    port = os.getenv("DB_PORT", "5432")
-    user = os.getenv("DB_USER", "db_user")
-    password = os.getenv("DB_PASSWORD", "changeme")
-    name = os.getenv("DB_NAME", "crypto_analytics")
-    return f"postgresql://{user}:{password}@{host}:{port}/{name}"
-
-
-# Comma-separated list of allowed origins; "*" by default for early dev.
 _CORS_ORIGINS = os.getenv("CORS_ORIGINS", "*").split(",")
 
 
 # --------------------------------------------------------------------------- #
 # Response models
 # --------------------------------------------------------------------------- #
+class LiveSpread(BaseModel):
+    asset: str
+    long_exchange: str
+    short_exchange: str
+    long_symbol: Optional[str] = None
+    short_symbol: Optional[str] = None
+    long_price: Optional[float] = None
+    short_price: Optional[float] = None
+    raw_spread_pct: Optional[float] = None
+    real_spread_pct: Optional[float] = None
+    long_funding: Optional[float] = None
+    short_funding: Optional[float] = None
+    net_funding_24h_pct: Optional[float] = None
+    farm_24h_pct: Optional[float] = None
+    farm_72h_pct: Optional[float] = None
+    next_funding_ms: Optional[int] = None
 
 
-class SpreadRecord(BaseModel):
-    """One row of the ``spread_history`` table."""
+class SpreadHistoryPoint(BaseModel):
+    time: int
+    ex1_price: float
+    ex2_price: float
+    spread_pct: float
 
-    id: int
-    timestamp: datetime
-    pair: str
-    binance_price: Optional[float] = None
-    gate_price: Optional[float] = None
-    spread_pct: Optional[float] = None
-    binance_funding: Optional[float] = None
-    gate_funding: Optional[float] = None
+
+class SpreadHistoryResponse(BaseModel):
+    asset: str
+    ex1: str
+    ex2: str
+    points: list[SpreadHistoryPoint]
 
 
 # --------------------------------------------------------------------------- #
-# Lifespan: own the asyncpg pool for the app's lifetime
+# Lifespan
 # --------------------------------------------------------------------------- #
-
-
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
-    """Create the connection pool on startup, drain it on shutdown."""
-    pool = await asyncpg.create_pool(
-        dsn=_build_dsn(),
-        min_size=1,
-        max_size=10,
-        command_timeout=10,
-    )
-    app.state.pool = pool
-    log.info("DB pool created")
+    db = Database(load_db_settings())
+    await db.connect()
+    await db.init_schema()
+    app.state.db = db
+    log.info("API ready")
     try:
         yield
     finally:
-        await pool.close()
-        log.info("DB pool closed")
+        await db.close()
 
 
 app = FastAPI(
-    title="Crypto Arbitrage API",
-    version="1.0.0",
-    description="Read-only access to cross-exchange spread history.",
+    title="Delta-Neutral Funding Arbitrage API",
+    version="2.0.0",
+    description="Live cross-exchange spreads, funding farm estimates and history.",
     lifespan=lifespan,
 )
 
@@ -108,22 +105,11 @@ app.add_middleware(
 # --------------------------------------------------------------------------- #
 # Routes
 # --------------------------------------------------------------------------- #
-
-_LATEST_QUERY = """
-SELECT id, timestamp, pair, binance_price, gate_price,
-       spread_pct, binance_funding, gate_funding
-FROM spread_history
-ORDER BY timestamp DESC
-LIMIT 50
-"""
-
-
 @app.get("/health", tags=["meta"])
 async def health(request: Request) -> dict:
-    """Liveness/readiness probe target: verifies the DB is reachable."""
-    pool: asyncpg.Pool = request.app.state.pool
+    db: Database = request.app.state.db
     try:
-        async with pool.acquire() as conn:
+        async with db.pool.acquire() as conn:
             await conn.fetchval("SELECT 1")
     except Exception as exc:  # noqa: BLE001
         raise HTTPException(status_code=503, detail="database unavailable") from exc
@@ -131,18 +117,46 @@ async def health(request: Request) -> dict:
 
 
 @app.get(
-    "/api/v1/spreads/latest",
-    response_model=list[SpreadRecord],
+    "/api/v1/spreads/live",
+    response_model=list[LiveSpread],
     tags=["spreads"],
 )
-async def latest_spreads(request: Request) -> list[SpreadRecord]:
-    """Return the 50 most recent spread records, newest first."""
-    pool: asyncpg.Pool = request.app.state.pool
+async def live_spreads(
+    request: Request,
+    limit: int = Query(100, ge=1, le=500),
+) -> list[LiveSpread]:
+    """Return the latest cached scan cycle, widest real spread first."""
+    db: Database = request.app.state.db
     try:
-        async with pool.acquire() as conn:
-            rows = await conn.fetch(_LATEST_QUERY)
+        rows = await db.get_live_spreads(limit=limit)
     except Exception as exc:  # noqa: BLE001
-        log.exception("Failed to query spread_history")
+        log.exception("Failed to read live_spreads")
         raise HTTPException(status_code=503, detail="database query failed") from exc
+    return [LiveSpread(**{k: row.get(k) for k in LiveSpread.model_fields}) for row in rows]
 
-    return [SpreadRecord(**dict(row)) for row in rows]
+
+@app.get(
+    "/api/v1/spread-history/{asset}/{ex1}/{ex2}",
+    response_model=SpreadHistoryResponse,
+    tags=["spreads"],
+)
+async def spread_history(
+    asset: str,
+    ex1: str,
+    ex2: str,
+    days: int = Query(3, ge=1, le=14),
+) -> SpreadHistoryResponse:
+    """Compute hourly spread history on demand via ccxt (not persisted)."""
+    try:
+        points = await fetch_spread_history(asset, ex1, ex2, days=days)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:  # noqa: BLE001
+        log.exception("Failed to build spread history")
+        raise HTTPException(status_code=502, detail="exchange data unavailable") from exc
+    return SpreadHistoryResponse(
+        asset=asset.upper(),
+        ex1=ex1,
+        ex2=ex2,
+        points=[SpreadHistoryPoint(**p) for p in points],
+    )

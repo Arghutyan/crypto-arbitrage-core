@@ -16,17 +16,53 @@ spec:
     spec:
       imagePullSecrets:
         - name: ghcr-secret
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
       containers:
         - name: crypto-arb-engine
           image: ghcr.io/arghutyan/crypto-arbitrage-core:latest
           imagePullPolicy: Always
+          # Default image command (python main.py) runs the scan+alert engine.
+          command: ["python", "main.py"]
+          env:
+            - name: DB_HOST
+              value: "postgres-service"
+            - name: DB_PORT
+              value: "5432"
+            - name: DB_USER
+              value: "db_user"
+            - name: DB_PASSWORD
+              value: "changeme"          # TODO: migrate to a K8s Secret
+            - name: DB_NAME
+              value: "crypto_analytics"
+            - name: ARB_POLL_INTERVAL
+              value: "30"
+            - name: ARB_MIN_RAW_SPREAD
+              value: "0.2"
+            - name: TELEGRAM_BOT_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: app-secrets
+                  key: TELEGRAM_BOT_TOKEN
+                  optional: true
+            - name: TELEGRAM_ADMIN_IDS
+              valueFrom:
+                secretKeyRef:
+                  name: app-secrets
+                  key: TELEGRAM_ADMIN_IDS
+                  optional: true
           resources:
             requests:
-              memory: "128Mi"
-              cpu: "100m"
-            limits:
               memory: "256Mi"
-              cpu: "200m"
+              cpu: "150m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"
           securityContext:
             allowPrivilegeEscalation: false
             runAsNonRoot: true
+            readOnlyRootFilesystem: false
+            capabilities:
+              drop:
+                - ALL

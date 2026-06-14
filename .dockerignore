@@ -3,6 +3,12 @@
 venv/
 env/
 
+# Frontend (built as its own image) and infra
+frontend/
+node_modules/
+k8s/
+.github/
+
 # Python caches / build artifacts
 __pycache__/
 *.py[cod]

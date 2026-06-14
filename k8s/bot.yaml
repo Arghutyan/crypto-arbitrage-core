@@ -1,18 +1,22 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: crypto-api
+  name: crypto-bot
   labels:
-    app: crypto-api
+    app: crypto-bot
 spec:
+  # The aiogram bot uses Telegram long polling, so it must stay a single
+  # replica — two pods would fight over getUpdates and drop messages.
   replicas: 1
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
-      app: crypto-api
+      app: crypto-bot
   template:
     metadata:
       labels:
-        app: crypto-api
+        app: crypto-bot
     spec:
       imagePullSecrets:
         - name: ghcr-secret
@@ -20,15 +24,11 @@ spec:
         runAsNonRoot: true
         runAsUser: 10001
       containers:
-        - name: crypto-api
+        - name: crypto-bot
           image: ghcr.io/arghutyan/crypto-arbitrage-core:latest
           imagePullPolicy: Always
-          command:
-            ["uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8000"]
-          ports:
-            - name: http
-              containerPort: 8000
-              protocol: TCP
+          # Same core image as the engine/api; the command selects the bot role.
+          command: ["python", "-m", "bot"]
           env:
             - name: DB_HOST
               value: "postgres-service"
@@ -40,50 +40,30 @@ spec:
               value: "changeme"          # TODO: migrate to a K8s Secret
             - name: DB_NAME
               value: "crypto_analytics"
+            # The bot is useless without a token, so this ref is required
+            # (no optional: true) — the pod will fail fast if it is missing.
+            - name: TELEGRAM_BOT_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: app-secrets
+                  key: TELEGRAM_BOT_TOKEN
+            - name: TELEGRAM_ADMIN_IDS
+              valueFrom:
+                secretKeyRef:
+                  name: app-secrets
+                  key: TELEGRAM_ADMIN_IDS
+                  optional: true
           resources:
             requests:
-              cpu: "100m"
               memory: "128Mi"
+              cpu: "100m"
             limits:
-              cpu: "300m"
               memory: "256Mi"
-          readinessProbe:
-            httpGet:
-              path: /health
-              port: 8000
-            initialDelaySeconds: 5
-            periodSeconds: 10
-            timeoutSeconds: 3
-            failureThreshold: 3
-          livenessProbe:
-            httpGet:
-              path: /health
-              port: 8000
-            initialDelaySeconds: 15
-            periodSeconds: 20
-            timeoutSeconds: 3
-            failureThreshold: 3
+              cpu: "300m"
           securityContext:
             allowPrivilegeEscalation: false
+            runAsNonRoot: true
             readOnlyRootFilesystem: false
             capabilities:
               drop:
                 - ALL
-
----
-
-apiVersion: v1
-kind: Service
-metadata:
-  name: api-service
-  labels:
-    app: crypto-api
-spec:
-  type: ClusterIP
-  selector:
-    app: crypto-api
-  ports:
-    - name: http
-      port: 80
-      targetPort: 8000
-      protocol: TCP

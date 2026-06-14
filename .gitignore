@@ -1,3 +1,8 @@
 venv/
 __pycache__/
 .venv/
+
+# Local secrets / runtime config — never commit. Use .env.example as template.
+.env
+.env.*
+!.env.example

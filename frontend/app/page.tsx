@@ -1,26 +1,10 @@
-import { Activity, RefreshCw, TriangleAlert, Zap } from "lucide-react";
-import { API_BASE_URL, fetchLatestSpreads } from "@/lib/api";
-import type { SpreadRow } from "@/lib/types";
-import FilterBar from "@/components/FilterBar";
-import SpreadTable from "@/components/SpreadTable";
-import StatCards from "@/components/StatCards";
+import { Activity, Zap } from "lucide-react";
+import { API_BASE_URL } from "@/lib/api";
+import LiveDashboard from "@/components/LiveDashboard";
 
-// Always render fresh — this is a live trading view.
-export const dynamic = "force-dynamic";
-
-export default async function DashboardPage() {
-  let rows: SpreadRow[] = [];
-  let error: string | null = null;
-
-  try {
-    rows = await fetchLatestSpreads();
-  } catch (err) {
-    error = err instanceof Error ? err.message : "Unknown error";
-  }
-
+export default function DashboardPage() {
   return (
     <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
-      {/* Brand header */}
       <header className="mb-8 flex flex-col gap-6 border-b border-white/10 pb-6 lg:flex-row lg:items-center lg:justify-between">
         <div className="flex items-center gap-3">
           <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-gradient-to-br from-accent to-accent-muted shadow-glow">
@@ -31,7 +15,7 @@ export default async function DashboardPage() {
               Spread<span className="text-accent">+</span>
             </h1>
             <p className="text-sm text-slate-500">
-              Cross-exchange crypto arbitrage dashboard
+              Delta-neutral funding arbitrage screener
             </p>
           </div>
         </div>
@@ -51,45 +35,10 @@ export default async function DashboardPage() {
         </div>
       </header>
 
-      {/* Filter bar */}
-      <section className="mb-6 rounded-2xl border border-white/10 bg-base-850/40 p-4 backdrop-blur">
-        <FilterBar />
-      </section>
-
-      {error ? (
-        <div className="flex flex-col items-center justify-center gap-3 rounded-2xl border border-rose-500/20 bg-rose-500/[0.06] py-16 text-center">
-          <TriangleAlert className="h-8 w-8 text-rose-400" />
-          <p className="text-sm font-medium text-rose-200">
-            Couldn&apos;t reach the backend
-          </p>
-          <p className="max-w-md text-xs text-slate-500">{error}</p>
-          <p className="mt-1 inline-flex items-center gap-1.5 text-xs text-slate-600">
-            <RefreshCw className="h-3.5 w-3.5" />
-            Ensure the FastAPI service is running at{" "}
-            <code className="rounded bg-base-700/60 px-1 py-0.5 text-slate-400">
-              {API_BASE_URL}
-            </code>
-          </p>
-        </div>
-      ) : (
-        <div className="flex flex-col gap-6">
-          <StatCards rows={rows} />
-
-          <div className="flex items-center justify-between">
-            <h2 className="text-sm font-semibold uppercase tracking-wider text-slate-400">
-              Latest Spreads
-            </h2>
-            <span className="text-xs text-slate-600">
-              {rows.length} record{rows.length === 1 ? "" : "s"}
-            </span>
-          </div>
-
-          <SpreadTable rows={rows} />
-        </div>
-      )}
+      <LiveDashboard />
 
       <footer className="mt-10 border-t border-white/10 pt-6 text-center text-xs text-slate-600">
-        Spread+ · Data refreshes on each load · For research use only
+        Spread+ · Real-time across 10 venues · For research use only
       </footer>
     </main>
   );
