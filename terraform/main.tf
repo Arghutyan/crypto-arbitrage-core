@@ -87,6 +87,7 @@ resource "aws_key_pair" "deployer_key" {
 resource "aws_instance" "k3s_node" {
   ami                    = data.aws_ami.ubuntu.id
   instance_type          = "m7i-flex.large"
+  user_data = file("${path.module}/setup.sh")
   key_name               = aws_key_pair.deployer_key.key_name
   vpc_security_group_ids = [aws_security_group.k3s_sg.id]
 }
