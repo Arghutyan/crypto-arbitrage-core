@@ -12,7 +12,7 @@ env:
   CORE_IMAGE: ghcr.io/arghutyan/crypto-arbitrage-core
   FRONTEND_IMAGE: ghcr.io/arghutyan/crypto-arbitrage-frontend
   # Inlined into the Next.js client bundle at image build time.
-  NEXT_PUBLIC_API_URL: http://api.arbitcrypto.xyz
+  NEXT_PUBLIC_API_URL: https://api.arbitcrypto.xyz
 
 jobs:
   build-and-push:

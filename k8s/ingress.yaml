@@ -2,8 +2,17 @@ apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
   name: arbitcrypto-ingress
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
 spec:
   ingressClassName: traefik
+  tls:
+    - hosts:
+        - arbitcrypto.xyz
+      secretName: arbitcrypto.xyz-tls
+    - hosts:
+        - api.arbitcrypto.xyz
+      secretName: api.arbitcrypto.xyz-tls
   rules:
     - host: arbitcrypto.xyz
       http:
