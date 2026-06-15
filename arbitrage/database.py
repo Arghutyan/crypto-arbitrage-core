@@ -166,6 +166,7 @@ class Database:
     async def get_live_spreads(self, limit: int = 100) -> list[dict]:
         query = """
             SELECT * FROM live_spreads
+            WHERE real_spread_pct <= 40
             ORDER BY real_spread_pct DESC NULLS LAST, raw_spread_pct DESC
             LIMIT $1
         """
