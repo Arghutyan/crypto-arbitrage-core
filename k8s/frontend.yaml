@@ -28,10 +28,6 @@ spec:
               containerPort: 3000
               protocol: TCP
           env:
-            # Server-side fetches run inside the cluster, so point at the
-            # in-cluster API Service rather than localhost.
-            - name: NEXT_PUBLIC_API_URL
-              value: "http://api-service"
             - name: NODE_ENV
               value: "production"
             - name: PORT

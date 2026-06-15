@@ -40,6 +40,8 @@ spec:
                   key: POSTGRES_PASSWORD
             - name: DATABASE_URL
               value: "postgresql+asyncpg://db_user:$(POSTGRES_PASSWORD)@postgres-service:5432/crypto_analytics"
+            - name: CORS_ORIGINS
+              value: "http://arbitcrypto.xyz"
           resources:
             requests:
               cpu: "100m"

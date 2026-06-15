@@ -12,6 +12,9 @@ RUN if [ -f package-lock.json ]; then npm ci; else npm install; fi
 # ---------- Stage 2: build the app ----------
 FROM node:22-alpine AS builder
 WORKDIR /app
+# NEXT_PUBLIC_* variables are inlined into the client bundle at build time.
+ARG NEXT_PUBLIC_API_URL=http://localhost:8000
+ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 ENV NEXT_TELEMETRY_DISABLED=1

@@ -11,6 +11,8 @@ env:
   # container command selects the role. There is no separate API image.
   CORE_IMAGE: ghcr.io/arghutyan/crypto-arbitrage-core
   FRONTEND_IMAGE: ghcr.io/arghutyan/crypto-arbitrage-frontend
+  # Inlined into the Next.js client bundle at image build time.
+  NEXT_PUBLIC_API_URL: http://api.arbitcrypto.xyz
 
 jobs:
   build-and-push:
@@ -71,6 +73,8 @@ jobs:
           push: true
           tags: ${{ steps.meta-frontend.outputs.tags }}
           labels: ${{ steps.meta-frontend.outputs.labels }}
+          build-args: |
+            NEXT_PUBLIC_API_URL=${{ env.NEXT_PUBLIC_API_URL }}
           cache-from: type=gha,scope=frontend
           cache-to: type=gha,mode=max,scope=frontend
 
