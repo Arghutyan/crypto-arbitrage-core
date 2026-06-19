@@ -134,3 +134,66 @@ kubectl apply -f k8s/frontend.yaml
 
 CI (`.github/workflows/build-and-push.yml`) builds the core + frontend images on
 push to `main` and rolls out the engine, api, bot, and frontend deployments.
+
+---
+
+## Infrastructure & DevOps
+
+The production deployment is fully automated and cloud-native, spanning IaC provisioning, container orchestration, TLS termination, CI/CD, observability, and autonomous disaster recovery — with zero manual intervention required after initial bootstrap.
+
+### Infrastructure as Code (Terraform)
+
+All cloud resources are declared in `terraform/` and managed via Terraform with a remote backend for safe team collaboration.
+
+- **Compute** — AWS `m7i-flex.large` EC2 instance (Intel Xeon Scalable, burstable vCPU credits) running Ubuntu 24.04 LTS (Noble), provisioned via `user_data` bootstrap script.
+- **Storage** — Two S3 buckets:
+  - `terraform-state-*` — remote Terraform state, with **versioning enabled**, **AES-256 server-side encryption**, and **S3 native state locking** (`use_lockfile = true`) replacing the legacy DynamoDB lock table.
+  - `arbitcrypto-db-backups-*` — dedicated bucket for PostgreSQL database dumps (see Disaster Recovery below).
+- **Root volume** — `gp3` EBS, dynamically resizable without instance stop via `aws_instance.root_block_device`.
+- **Networking** — Security group allowing inbound SSH (22), HTTP (80), and HTTPS (443) only; all egress unrestricted.
+- **Key management** — Ed25519 deployer key pair provisioned via `aws_key_pair`; private key never stored in state.
+
+### Kubernetes (K3s)
+
+The application runs on a single-node **K3s** cluster (lightweight Kubernetes) bootstrapped on the EC2 instance at provision time.
+
+- **PostgreSQL** — deployed as a `StatefulSet` with a `PersistentVolumeClaim` backed by a local `gp3` volume, guaranteeing stable network identity and durable storage across pod restarts.
+- **Application workloads** — `engine`, `api`, and `bot` run as separate `Deployment` objects, each independently scalable and rollable. The `frontend` Next.js app is similarly deployed as its own `Deployment`.
+- **Image registry** — all images are pulled from **GitHub Container Registry (GHCR)**; in-cluster pull access is granted via a pre-provisioned `ghcr-secret` `imagePullSecret`.
+- **Health probes** — `livenessProbe` and `readinessProbe` on the API (`GET /health`) prevent traffic from being routed to pods that have not fully initialised.
+
+### Networking & Security
+
+- **Traefik Ingress** — K3s ships with Traefik as the default Ingress controller; all external HTTP/HTTPS traffic is routed through it.
+- **Automated TLS** — Traefik integrates with **Let's Encrypt** via the ACME protocol (`TLS-ALPN-01` challenge) to provision and auto-renew certificates, ensuring the API and dashboard are always served over HTTPS with zero manual certificate management.
+- **Internal services** — PostgreSQL, Prometheus, and Grafana are not exposed through the Ingress; they are reachable only within the cluster or via SSH tunnelling (see Observability).
+
+### CI/CD Pipeline
+
+Defined in `.github/workflows/build-and-push.yml`, the pipeline triggers on every push to `main`:
+
+1. **Build** — Docker Buildx builds the backend (`engine`/`api`/`bot`) and `frontend` images in parallel, leveraging layer caching to minimise build time.
+2. **Push** — Multi-arch images are pushed to **GHCR** under the repository's package namespace, tagged with the commit SHA and `latest`.
+3. **Zero-downtime rollout** — `kubectl rollout restart deployment/<name>` is issued for each workload. K3s performs a rolling update, bringing up pods with the new image before terminating old ones, guaranteeing uninterrupted service throughout the deploy.
+
+### Observability
+
+- **Prometheus** — scrapes node and pod metrics (CPU, memory, disk I/O, network) from the K3s cluster on a 15-second interval.
+- **Grafana** — pre-configured dashboards visualise cluster health and application-level metrics sourced from Prometheus.
+- **Secure access** — neither Prometheus nor Grafana is exposed to the public internet. Dashboards are accessed via **SSH local port forwarding**:
+  ```bash
+  ssh -L 3001:localhost:3001 -L 9090:localhost:9090 ubuntu@<server-ip>
+  ```
+  This eliminates the need for authentication middleware in front of the observability stack while keeping the attack surface minimal.
+
+### Disaster Recovery & Autonomous Maintenance
+
+All maintenance tasks are driven by server-side **cron jobs** — no external orchestration required.
+
+| Cron schedule | Task | Detail |
+| ------------- | ---- | ------ |
+| Daily (00:00 UTC) | **PostgreSQL full dump → S3** | `pg_dumpall` output is piped through `gzip` and streamed directly to `arbitcrypto-db-backups-*` via `aws s3 cp -` (no temporary disk writes), preserving full cluster dumps with daily retention. |
+| Weekly | **Container image pruning** | `crictl rmi --prune` removes dangling and unused images from the containerd image store, reclaiming disk space that would otherwise accumulate from rolling deployments. |
+| Continuous (K3s config) | **Log rotation** | K3s container log rotation is configured with strict `max-size` and `max-file` limits, preventing unbounded log growth from causing disk pressure on the single-node cluster. |
+
+> **Recovery objective** — in the event of instance failure, a full environment can be restored by running `terraform apply` (new EC2 instance + EBS) followed by restoring the latest S3 dump with `psql < dump.sql.gz`, with no data loss beyond the most recent daily window.
