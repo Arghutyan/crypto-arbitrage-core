@@ -150,3 +150,7 @@ output "dynamodb_table_name" {
   description = "Name of the DynamoDB table for Terraform state locking"
   value       = aws_dynamodb_table.terraform_locks.name
 }
+
+resource "aws_s3_bucket" "db_backups" {
+  bucket = "arbitcrypto-db-backups-${random_string.suffix.result}"
+}
